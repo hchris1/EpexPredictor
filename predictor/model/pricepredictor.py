@@ -285,11 +285,20 @@ def main():
     actuals = map(lambda p: str(round(p/10, 1)), actual.values())
     preds = map(lambda p: str(round(p/10, 1)), predicted.values())
 
-    x = list(x)[0:7*24]
-    actuals = list(actuals)[0:7*24]
-    preds = list(preds)[0:7*24]
+    x = list(x)[0:14*24]
+    actuals = list(actuals)[0:14*24]
+    preds = list(preds)[0:14*24]
 
     print(f"""
+---
+config:
+    xyChart:
+        width: 1700
+        height: 900
+        plotReservedSpacePercent: 80
+        xAxis:
+            showLabel: false
+---
 xychart-beta
     title "Performance comparison"
     x-axis [{",".join(x)}]
