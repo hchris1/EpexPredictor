@@ -130,7 +130,7 @@ class Prices:
             result.append(
                 {
                     "startsAt": formatted,
-                    "total": round(total, 1)
+                    "total": round(total, 2)
                 }
             )
 
