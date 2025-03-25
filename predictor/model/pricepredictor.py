@@ -128,6 +128,8 @@ class PricePredictor:
         
         df = pd.concat([self.solar, self.weather], axis=1).dropna()
         df = pd.concat([df, self.prices], axis=1).reset_index()
+        df = df.dropna(subset=["solar", "wind", "temp"])
+
 
         holis = holidays.country_holidays("DE")
         df["holiday"] = df["time"].apply(lambda t: 1 if t.weekday() == 6 or t.date() in holis else 0)
