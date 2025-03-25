@@ -76,6 +76,12 @@ sensor:
 ```yaml
 type: custom:plotly-graph
 time_offset: 26h
+layout:
+  yaxis9:
+    fixedrange: true
+    visible: false
+    minallowed: 0
+    maxallowed: 1
 entities:
   - entity: sensor.epex_price_prediction
     attribute: dummy
@@ -100,8 +106,8 @@ entities:
       color: orange
     x: $ex [Date.now(), Date.now()]
     "y":
-      - -1000
-      - 1000
+      - 0
+      - 1
 hours_to_show: 30
 refresh_interval: 10
 ```
