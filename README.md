@@ -30,25 +30,36 @@ Output:
 ## How it works
 - First, we create a simple multi-linear-regression to get an idea how important each of
 the training parameters is.
-- We then multiply each parameter with its weight.
-- This is not enough, because electricity prices are not linear.
-I.e. low wind&solar leads to gas power plants being turned on, and due to merit order
-pricing, electricity prices explode.
-- Therefore, in the next step, we use KNN (k=3) approach to find hours in the past with similar properties and use that to determine the final price
+- This alone is not enough, because electricity prices are not linear.
+E.g. low wind&solar leads to gas power plants being turned on, and due to merit order pricing, electricity prices explode.
+- Therefore, we then multiply each parameter with its weight (LinReg factor) to get a "normalized" data set.
+- In the next step, we use a KNN (k=3) approach to find hours in the past with similar properties and use that to determine the final price.
 
 ## Model performance
 No scientific evaluation. I just looked at the result and they mostly seem to be within 1-10%.
+Some observations:
+- At night, predictions are usually within 1-2ct/kWh
+- Morning/Evening peaks are usually within 3-4ct/kWh
+- Extreme peaks due to "Dunkelflaute" are correctly detected, but estimation of the exact price is high. E.g.
+the model might predict 75ct, while in reality it's only 60ct or vice versa
+- High PV noons are usually correctly detected. Sometimes it will return 3ct instead of -1ct, but the ballpark is usually correct.
 
 
 # Public API
 You can find a freely accessible installment of this software [here](https://epexpredictor.batzill.com/).
+Get a glimpse of the current prediction [here](https://epexpredictor.batzill.com/prices).
+
+There are no guarantees given whatsoever - it might work for you or not.
+I might stop or block this service at any time. Fair use is expected!
 
 # Home Assistant integration
 At some point, I might create a HA addon to run everything locally.
 For now, you have to either use my server, or run it yourself.
 
-Configuration:
-```
+
+
+### Configuration:
+```yaml
 sensor:
   - platform: rest
     resource: "https://epexpredictor.batzill.com/prices?fixedPrice=13.70084&taxPercent=19"
@@ -61,8 +72,8 @@ sensor:
       - prices
 ```
 
-Display, e.g. via Plotly Graph Card:
-```
+### Display, e.g. via Plotly Graph Card:
+```yaml
 type: custom:plotly-graph
 time_offset: 26h
 entities:
