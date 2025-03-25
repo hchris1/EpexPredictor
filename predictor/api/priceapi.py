@@ -90,6 +90,7 @@ class Prices:
 
         if startTs is None:
             startTs = datetime.datetime.now(tz=tzgerman)
+            startTs = startTs.replace(minute=0, second=0, microsecond=0)
         else:
             startTs = dateutil.parser.isoparse(startTs)
             if startTs.tzinfo is None:
