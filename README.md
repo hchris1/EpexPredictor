@@ -40,7 +40,7 @@ No scientific evaluation. I just looked at the result and they mostly seem to be
 Some observations:
 - At night, predictions are usually within 1-2ct/kWh
 - Morning/Evening peaks are usually within 3-4ct/kWh
-- Extreme peaks due to "Dunkelflaute" are correctly detected, but estimation of the exact price is high. E.g.
+- Extreme peaks due to "Dunkelflaute" are correctly detected, but estimation of the exact price is a challange. E.g.
 the model might predict 75ct, while in reality it's only 60ct or vice versa
 - High PV noons are usually correctly detected. Sometimes it will return 3ct instead of -1ct, but the ballpark is usually correct.
 
