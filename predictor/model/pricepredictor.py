@@ -275,12 +275,35 @@ def main():
 
     pred = PricePredictor(testdata=True, learnDays=60)
     pred.train()
+
+    actual = pred.predict()
+    predicted = pred.predict(estimateAll=True)
+
+    #xdt : List[datetime.datetime] = list(actual.keys())
+    #x = map(lambda k : k.isoformat(), xdt)
+    x = map(str, range(0, len(actual)))
+    actuals = map(lambda p: str(round(p/10, 1)), actual.values())
+    preds = map(lambda p: str(round(p/10, 1)), predicted.values())
+
+    x = list(x)[0:7*24]
+    actuals = list(actuals)[0:7*24]
+    preds = list(preds)[0:7*24]
+
+    print(f"""
+xychart-beta
+    title "Performance comparison"
+    x-axis [{",".join(x)}]
+    line [{",".join(actuals)}]
+    line [{",".join(preds)}]
+    """)
     
-    prices = pred.predict()
+
+    
+    """prices = pred.predict()
     prices = {
         k.isoformat(): v for k, v in prices.items()
     }
-    print(json.dumps(prices))
+    print(json.dumps(prices))"""
 
 if __name__ == "__main__":
     main()

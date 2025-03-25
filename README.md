@@ -44,6 +44,8 @@ Some observations:
 the model might predict 75ct, while in reality it's only 60ct or vice versa
 - High PV noons are usually correctly detected. Sometimes it will return 3ct instead of -1ct, but the ballpark is usually correct.
 
+See also: PERFORMANCE.md for a random comparison
+
 
 # Public API
 You can find a freely accessible installment of this software [here](https://epexpredictor.batzill.com/).
