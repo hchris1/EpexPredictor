@@ -133,7 +133,11 @@ class Prices:
                 }
             )
 
-        return json.dumps(result)
+        return json.dumps(
+            {
+                "prices": result
+            }
+        )
 
 
 prices : Prices = Prices()
