@@ -1,0 +1,6 @@
+holidays
+open_meteo_solar_forecast
+scikit-learn
+pandas
+numpy
+flask
