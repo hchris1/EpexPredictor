@@ -1,5 +1,6 @@
 import logging
 import sys
+import os
 from typing import Dict
 
 import pytz
@@ -21,6 +22,10 @@ log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(messa
 stream_handler.setFormatter(log_formatter)
 rootLogger.addHandler(stream_handler)
 
+# TODO: isn't there a nicer way...?
+logging.getLogger("uvicorn.access").handlers.clear()
+logging.getLogger("uvicorn.access").addHandler(stream_handler)
+
 log = logging.getLogger(__name__)
 
 
@@ -30,13 +35,15 @@ def api_docs():
     return RedirectResponse("/docs")
 
 
+USE_PERSISTENT_TESTDATA = os.getenv("USE_PERSISTENT_TEST_DATA", "false").lower() in ("yes", "true", "t", "1")
+
 
 import predictor.model.pricepredictor as pp
 from threading import Lock
 
 
 class Prices:
-    predictor : pp.PricePredictor = pp.PricePredictor(testdata=False)
+    predictor : pp.PricePredictor = pp.PricePredictor(testdata=USE_PERSISTENT_TESTDATA)
     last_weather_update : datetime.datetime = datetime.datetime(1980, 1, 1)
     last_price_update : datetime.datetime = datetime.datetime(1980, 1, 1)
 
@@ -77,15 +84,15 @@ class Prices:
         # Update prices every 12 hours. If it's after 13:00 local, and we don't have prices for the next day yet, update every 5 minutes
         latest_price = self.predictor.get_last_known_price()
         price_update_frequency = 12 * 60 * 60
-        if latest_price is None or (latest_price[0] - datetime.datetime.now(pytz.UTC)).seconds <= 60 * 60 * 11:
+        if latest_price is None or (latest_price[0] - datetime.datetime.now(pytz.UTC)).total_seconds() <= 60 * 60 * 10:
             price_update_frequency = 5 * 60
 
-        if price_age.seconds > price_update_frequency:
+        if price_age.total_seconds() > price_update_frequency:
             self.predictor.refresh_prices()
             self.last_price_update = currts
             retrain = True
 
-        if weather_age.seconds > 60 * 60 * 8: # update weather every 8 hours
+        if weather_age.total_seconds() > 60 * 60 * 8: # update weather every 8 hours
             self.predictor.refresh_forecasts()
             self.last_weather_update = currts
             retrain = True

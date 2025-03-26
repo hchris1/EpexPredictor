@@ -13,6 +13,9 @@
                 "predictor.api.priceapi:app",
                 "--reload"
             ],
+            "env": {
+                "USE_PERSISTENT_TEST_DATA": "true"
+            },
             "jinja": true
         },
         {
@@ -21,7 +24,10 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "justMyCode": false
+            "justMyCode": false,
+            "env": {
+                "USE_PERSISTENT_TEST_DATA": "true"
+            },
         }
     ]
 }
