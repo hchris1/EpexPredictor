@@ -32,6 +32,8 @@ def api_docs():
 
 
 import predictor.model.pricepredictor as pp
+from threading import Lock
+
 
 class Prices:
     predictor : pp.PricePredictor = pp.PricePredictor(testdata=False)
@@ -41,8 +43,15 @@ class Prices:
     cachedprices : Dict[datetime.datetime, float] = {}
     cachedeval : Dict[datetime.datetime, float] = {}
 
+    # TODO: Rework predictor to proper asyncio
+    mutex = Lock()
+
     def __init__(self):
         pass
+
+    def prices_serialized(self, hours : int = -1, fixedPrice : float = 0.0, taxPercent : float = 0.0, startTs : datetime.datetime|None = None, evaluation : bool = False):
+        with self.mutex:
+            return self.prices(hours, fixedPrice, taxPercent, startTs, evaluation)
 
     def prices(self, hours : int = -1, fixedPrice : float = 0.0, taxPercent : float = 0.0, startTs : datetime.datetime|None = None, evaluation : bool = False):
         tzgerman = pytz.timezone("Europe/Berlin")
@@ -107,6 +116,9 @@ class Prices:
         return { "prices": result }
 
 
+
+
+
 pricesHandler = Prices()
 @app.get("/prices")
 def get_prices(
@@ -118,7 +130,7 @@ def get_prices(
     """
     Get price prediction
     """
-    return pricesHandler.prices(hours, fixedPrice, taxPercent, startTs, evaluation)
+    return pricesHandler.prices_serialized(hours, fixedPrice, taxPercent, startTs, evaluation)
 
 
     
