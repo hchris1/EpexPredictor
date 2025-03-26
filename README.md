@@ -107,6 +107,12 @@ layout:
     maxallowed: 1
 entities:
   - entity: sensor.epex_price_prediction
+    name: EPEX Price History
+    unit_of_measurement: ct/kWh
+    texttemplate: "%{y:.0f}"
+    mode: lines+text
+    textposition: top right
+  - entity: sensor.epex_price_prediction
     attribute: dummy
     name: EPEX Price Prediction
     unit_of_measurement: ct/kWh

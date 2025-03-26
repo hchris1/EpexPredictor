@@ -1,13 +1,11 @@
 FROM python:latest
 
-WORKDIR /app/
+WORKDIR /code/
 
-COPY ./requirements.txt /app/
-COPY ./predictor /app/predictor
-
-
-RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt
-RUN pip install --no-cache-dir --upgrade gunicorn
+COPY ./requirements.txt /code/requirements.txt
+COPY ./predictor /code/predictor
 
 
-CMD ["gunicorn", "-b", "0.0.0.0:80", "-w", "1", "predictor.api.priceapi:app"]
+RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+
+CMD ["fastapi", "run", "predictor/api/priceapi.py", "--port", "80"]
