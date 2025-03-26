@@ -89,10 +89,25 @@ sensor:
     method: GET
     unique_id: epex_price_prediction
     name: "EPEX Price Prediction"
+    scan_interval: 500
     unit_of_measurement: ct/kWh
     value_template: "{{ value_json.prices[0].total }}"
     json_attributes:
       - prices
+
+  # If you want to evaluate performance in real time, you can add another sensor like this
+  # and plot it in the same diagram as the actual prediction sensor
+
+  #- platform: rest
+  #  resource: "https://epexpredictor.batzill.com/prices?fixedPrice=13.70084&taxPercent=19&#evaluation=true"
+  #  method: GET
+  #  unique_id: epex_price_prediction_evaluation
+  #  scan_interval: 3600
+  #  name: "EPEX Price Prediction Evaluation"
+  #  unit_of_measurement: ct/kWh
+  #  value_template: "{{ value_json.prices[0].total }}"
+  #  json_attributes:
+  #    - prices
 ```
 
 ### Display, e.g. via Plotly Graph Card:
