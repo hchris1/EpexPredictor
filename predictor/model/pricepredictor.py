@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import math
-from typing import Dict, List, cast
+from typing import Dict, List, Tuple, cast
 import urllib.request
 from open_meteo_solar_forecast import OpenMeteoSolarForecast
 import pandas as pd
@@ -18,6 +18,8 @@ import pytz
 
 from sklearn.linear_model import LinearRegression
 from sklearn.neighbors import KNeighborsRegressor
+
+log = logging.getLogger(__name__)
 
 
 LATITUDES = [48.4,
@@ -140,17 +142,23 @@ class PricePredictor:
 
 
     def refresh_prices(self) -> None:
+        log.info("Updating prices...")
         try:
             self.prices = self.fetch_prices()
+            last_price = self.get_last_known_price()
+            log.info("Price update done. Prices available until " + last_price[0].isoformat() if last_price is not None else "UNEXPECTED NONE")
         except Exception as e:
-            logging.warning(f"Failed to update prices : {str(e)}")
+            log.warning(f"Failed to update prices : {str(e)}")
     
     def refresh_forecasts(self) -> None:
+        log.info("Updating weather forecast...")
         try:
             self.solar = self.fetch_solar()
             self.weather = self.fetch_weather()
+            log.info("Weather update done")
         except Exception as e:
-            logging.warning(f"Failed to update forecast : {str(e)}")
+            log.warning(f"Failed to update forecast : {str(e)}")
+        
 
     def fetch_solar(self) -> pd.DataFrame | None:
         if self.testdata and os.path.exists("solar.json"):
@@ -261,7 +269,13 @@ class PricePredictor:
             data.to_json("prices.json")
 
         return data
-        
+
+    def get_last_known_price(self) -> Tuple[datetime.datetime, float] | None:
+        if self.prices is None:
+            return None
+        lastrow = self.prices.dropna().reset_index().iloc[-1]
+        return lastrow["time"].to_pydatetime(), float(lastrow["price"])
+
 
 
 
@@ -269,9 +283,9 @@ def main():
     import sys
     pd.set_option("display.max_rows", None)
 
-    root = logging.getLogger()
-    root.setLevel(logging.DEBUG)
-    handler = logging.StreamHandler(sys.stdout)
+    root = log.getLogger()
+    root.setLevel(log.DEBUG)
+    handler = log.StreamHandler(sys.stdout)
 
     pred = PricePredictor(testdata=True, learnDays=60)
     pred.train()

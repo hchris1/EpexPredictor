@@ -1,3 +1,5 @@
+import logging
+import sys
 from typing import Dict
 
 import pytz
@@ -6,7 +8,21 @@ from fastapi.responses import RedirectResponse
 import datetime
 
 
+
 app = FastAPI(title="EPEX day-ahead prediction API")
+
+
+rootLogger = logging.getLogger()
+rootLogger.setLevel(logging.INFO)
+
+# StreamHandler for console
+stream_handler = logging.StreamHandler(sys.stdout)
+log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+stream_handler.setFormatter(log_formatter)
+rootLogger.addHandler(stream_handler)
+
+log = logging.getLogger(__name__)
+
 
 
 @app.get("/")
@@ -18,12 +34,12 @@ def api_docs():
 import predictor.model.pricepredictor as pp
 
 class Prices:
-    predictor : pp.PricePredictor = pp.PricePredictor(testdata=True)
+    predictor : pp.PricePredictor = pp.PricePredictor(testdata=False)
     last_weather_update : datetime.datetime = datetime.datetime(1980, 1, 1)
     last_price_update : datetime.datetime = datetime.datetime(1980, 1, 1)
 
-    cachedprices : Dict[datetime.datetime, float]
-    cachedeval : Dict[datetime.datetime, float]
+    cachedprices : Dict[datetime.datetime, float] = {}
+    cachedeval : Dict[datetime.datetime, float] = {}
 
     def __init__(self):
         pass
@@ -47,14 +63,24 @@ class Prices:
         weather_age = currts - self.last_weather_update
         price_age = currts - self.last_price_update
         retrain = False
-        if weather_age.seconds > 60 * 60 * 8: # update weather every 4 hours
-            self.predictor.refresh_forecasts()
-            self.last_weather_update = currts
-            retrain = True
-        if price_age.seconds > 60 * 15: # update prices every 15 mins
+
+
+        # Update prices every 12 hours. If it's after 13:00 local, and we don't have prices for the next day yet, update every 5 minutes
+        latest_price = self.predictor.get_last_known_price()
+        price_update_frequency = 12 * 60 * 60
+        if latest_price is None or (latest_price[0] - datetime.datetime.now(pytz.UTC)).seconds <= 60 * 60 * 11:
+            price_update_frequency = 5 * 60
+
+        if price_age.seconds > price_update_frequency:
             self.predictor.refresh_prices()
             self.last_price_update = currts
             retrain = True
+
+        if weather_age.seconds > 60 * 60 * 8: # update weather every 8 hours
+            self.predictor.refresh_forecasts()
+            self.last_weather_update = currts
+            retrain = True
+
         if retrain:
             self.predictor.train()
             self.cachedprices = self.predictor.predict()
