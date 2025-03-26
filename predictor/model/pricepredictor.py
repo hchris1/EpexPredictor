@@ -283,9 +283,9 @@ def main():
     import sys
     pd.set_option("display.max_rows", None)
 
-    root = log.getLogger()
-    root.setLevel(log.DEBUG)
-    handler = log.StreamHandler(sys.stdout)
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    handler = logging.StreamHandler(sys.stdout)
 
     pred = PricePredictor(testdata=True, learnDays=60)
     pred.train()
