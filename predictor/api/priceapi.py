@@ -18,6 +18,12 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+
+logging.getLogger("uvicorn.error").handlers.clear()
+logging.getLogger("uvicorn.error").handlers.extend(logging.getLogger().handlers)
+logging.getLogger("uvicorn.access").handlers.clear()
+logging.getLogger("uvicorn.access").handlers.extend(logging.getLogger().handlers)
+
 log = logging.getLogger(__name__)
 
 @app.get("/")

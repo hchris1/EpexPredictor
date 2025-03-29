@@ -8,4 +8,4 @@ COPY ./predictor /code/predictor
 
 RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 
-CMD ["fastapi", "run", "predictor/api/priceapi.py", "--port", "80"]
+CMD ["uvicorn", "predictor.api.priceapi:app", "--port", "80"]
