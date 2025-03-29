@@ -11,7 +11,16 @@ from fastapi.responses import RedirectResponse
 import datetime
 
 
-app = FastAPI(title="EPEX day-ahead prediction API")
+app = FastAPI(title="EPEX day-ahead prediction API", description="""
+API can be used free of charge on a fair use premise.
+There are no guarantees on availability or correctnes of the data.
+This is an open source project, feel free to host it yourself. [Source code and docs](https://github.com/b3nn0/EpexPredictor)
+
+### Attribution
+Electricity prices provided by [Bundesnetzagentur | SMARD.de](https://smard.de)
+
+[Weather data by Open-Meteo.com](https://open-meteo.com/)
+""")
 
 
 logging.basicConfig(
