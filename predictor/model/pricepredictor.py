@@ -161,6 +161,7 @@ class PricePredictor:
 
     async def fetch_solar(self) -> pd.DataFrame | None:
         if self.testdata and os.path.exists("solar.json"):
+            log.warning("Loading solar from persistent cache!")
             await asyncio.sleep(1) # simulate async http
             solar = pd.read_json("solar.json")
             solar.index = solar.index.tz_localize("UTC") # type: ignore
@@ -190,6 +191,7 @@ class PricePredictor:
     
     async def fetch_weather(self) -> pd.DataFrame | None:
         if self.testdata and os.path.exists("weather.json"):
+            log.warning("Loading weather from persistent cache!")
             await asyncio.sleep(1) # simulate async http
             weather = pd.read_json("weather.json")
             weather.index = weather.index.tz_localize("UTC") # type: ignore
@@ -228,6 +230,7 @@ class PricePredictor:
 
     async def fetch_prices(self) -> pd.DataFrame | None:
         if self.testdata and os.path.exists("prices.json"):
+            log.warning("Loading prices from persistent cache!")
             await asyncio.sleep(1) # simulate async http
             prices = pd.read_json("prices.json")
             prices.index = prices.index.tz_localize("UTC") # type: ignore
