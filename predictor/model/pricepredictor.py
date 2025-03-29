@@ -161,13 +161,20 @@ class PricePredictor:
 
     async def fetch_solar(self) -> pd.DataFrame | None:
         if self.testdata and os.path.exists("solar.json"):
+            await asyncio.sleep(1) # simulate async http
             solar = pd.read_json("solar.json")
             solar.index = solar.index.tz_localize("UTC") # type: ignore
             solar.index.set_names("time", inplace=True)
             return solar
 
-        result = OpenMeteoSolarForecast(azimuth=[0.0]*len(LATITUDES), declination=[0.0]*len(LATITUDES), dc_kwp=[1.0]*len(LATITUDES), latitude=LATITUDES, longitude=LONGITUDES, past_days=self.learnDays, forecast_days=self.forecastDays)
-        estimate = await result.estimate()
+        async with OpenMeteoSolarForecast(
+                    azimuth=[0.0]*len(LATITUDES),
+                    declination=[0.0]*len(LATITUDES),
+                    dc_kwp=[1.0]*len(LATITUDES), latitude=LATITUDES,
+                    longitude=LONGITUDES, past_days=self.learnDays,
+                    forecast_days=self.forecastDays) as forecast:
+            
+            estimate = await forecast.estimate()
 
         data = pd.DataFrame(estimate.watts.items(), columns=["time", "solar"]) # type: ignore
         data.time = data.reset_index().time.map(lambda dt: dt.replace(minute=0))
@@ -183,6 +190,7 @@ class PricePredictor:
     
     async def fetch_weather(self) -> pd.DataFrame | None:
         if self.testdata and os.path.exists("weather.json"):
+            await asyncio.sleep(1) # simulate async http
             weather = pd.read_json("weather.json")
             weather.index = weather.index.tz_localize("UTC") # type: ignore
             weather.index.set_names("time", inplace=True)
@@ -220,6 +228,7 @@ class PricePredictor:
 
     async def fetch_prices(self) -> pd.DataFrame | None:
         if self.testdata and os.path.exists("prices.json"):
+            await asyncio.sleep(1) # simulate async http
             prices = pd.read_json("prices.json")
             prices.index = prices.index.tz_localize("UTC") # type: ignore
             prices.index.set_names("time", inplace=True)

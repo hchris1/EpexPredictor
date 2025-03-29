@@ -10,26 +10,15 @@ from fastapi.responses import RedirectResponse
 import datetime
 
 
-
 app = FastAPI(title="EPEX day-ahead prediction API")
 
 
-rootLogger = logging.getLogger()
-rootLogger.setLevel(logging.INFO)
-
-# StreamHandler for console
-stream_handler = logging.StreamHandler(sys.stdout)
-log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-stream_handler.setFormatter(log_formatter)
-rootLogger.addHandler(stream_handler)
-
-# TODO: isn't there a nicer way...?
-logging.getLogger("uvicorn.access").handlers.clear()
-logging.getLogger("uvicorn.access").addHandler(stream_handler)
+logging.basicConfig(
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    level=logging.INFO
+)
 
 log = logging.getLogger(__name__)
-
-
 
 @app.get("/")
 def api_docs():
@@ -123,7 +112,7 @@ class Prices:
                 self.last_price_update = currts
                 retrain = True
 
-            if weather_age.total_seconds() > 60 * 60 * 8: # update weather every 8 hours
+            if weather_age.total_seconds() > 60 * 60 * 6: # update weather every 6 hours
                 await self.predictor.refresh_forecasts()
                 self.last_weather_update = currts
                 retrain = True
