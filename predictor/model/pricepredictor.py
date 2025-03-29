@@ -5,6 +5,7 @@ from typing import Dict, List, Tuple, cast
 import urllib.request
 from open_meteo_solar_forecast import OpenMeteoSolarForecast
 import pandas as pd
+import numpy as np
 import datetime
 import aiohttp
 import json
@@ -20,20 +21,23 @@ from sklearn.neighbors import KNeighborsRegressor
 
 log = logging.getLogger(__name__)
 
-
-LATITUDES = [48.4,
+# We sample these coordinates for solar/wind/temperature
+LATITUDES = [
+    48.4,
     49.7,
     51.3,
     52.8,
     53.8,
-    54.1]
-LONGITUDES = [9.3,
+    54.1
+]
+LONGITUDES = [
+    9.3,
     11.3,
     8.6,
     12.0,
     8.1,
     11.6
-    ]
+]
 
 
 class PricePredictor:
@@ -60,13 +64,15 @@ class PricePredictor:
         self.fulldata = await self.prepare_dataframe()
         if self.fulldata is None:
             return
-        
 
         learnset = self.fulldata.dropna()
         learn_params = learnset.drop(columns=["time", "price"])
         learn_output = learnset["price"]
         linreg = LinearRegression().fit(learn_params, learn_output)
         param_scaling_factors = linreg.coef_
+
+        weights = {col: param_scaling_factors[i] for i, col in enumerate(learn_params.columns.values)}
+        log.info(f"Traning result, importance of parameters: {json.dumps(weights)}")
 
         # Do the scaling on all params, then prepare knn
         learn_params *= param_scaling_factors
@@ -129,7 +135,10 @@ class PricePredictor:
         
         df = pd.concat([self.solar, self.weather], axis=1).dropna()
         df = pd.concat([df, self.prices], axis=1).reset_index()
-        df = df.dropna(subset=["solar", "wind", "temp"])
+        # allow nan only in price column. All others should be filled with valid data
+        datacols = list(df.columns.values)
+        datacols.remove("price")
+        df = df.dropna(subset=datacols).copy()
 
 
         holis = holidays.country_holidays("DE")
@@ -168,26 +177,33 @@ class PricePredictor:
             solar.index.set_names("time", inplace=True)
             return solar
 
-        async with OpenMeteoSolarForecast(
-                    azimuth=[0.0]*len(LATITUDES),
-                    declination=[0.0]*len(LATITUDES),
-                    dc_kwp=[1.0]*len(LATITUDES), latitude=LATITUDES,
-                    longitude=LONGITUDES, past_days=self.learnDays,
-                    forecast_days=self.forecastDays) as forecast:
-            
-            estimate = await forecast.estimate()
+        # TODO: in theory, OpenMeteoSolarForecast can handle it if we give it multiple locations, but strange things seem to happen then..
+        # Since it does its http requests seperately anyway, we can just loop ourself...
 
-        data = pd.DataFrame(estimate.watts.items(), columns=["time", "solar"]) # type: ignore
-        data.time = data.reset_index().time.map(lambda dt: dt.replace(minute=0))
-        data.time = pd.DatetimeIndex(data.time).tz_convert("UTC")
-        data = data.groupby("time").agg("mean")
-        #data.rename(columns={"fc_time": "time", "watts": "solar"}, inplace=True)
+        frames = []
+        for i in range(len(LATITUDES)):
+            lat = LATITUDES[i]
+            lon = LONGITUDES[i]
 
+            async with OpenMeteoSolarForecast(azimuth=0, declination=0, dc_kwp=1, latitude=lat, longitude=lon, past_days=self.learnDays, forecast_days=self.forecastDays) as forecast:
+                estimate = await forecast.estimate()
+
+                data = pd.DataFrame(estimate.watts.items(), columns=["time", f"solar_{i}"]) # type: ignore
+                data.time = data.time.map(lambda dt: dt.replace(minute=0))
+                data.time = pd.DatetimeIndex(data.time).tz_convert("UTC")
+                data = data.groupby("time").agg("mean")
+                frames.append(data)
+        
+
+        df = pd.concat(frames, axis=1).reset_index()
+        df["time"] = pd.to_datetime(df["time"], utc=True)
+        df.set_index("time", inplace=True)
+       
         if self.testdata:
-            data.to_json("solar.json")
+            df.to_json("solar.json")
 
-        assert isinstance(data, pd.DataFrame)
-        return data
+        assert isinstance(df, pd.DataFrame)
+        return df
     
     async def fetch_weather(self) -> pd.DataFrame | None:
         if self.testdata and os.path.exists("weather.json"):
@@ -208,18 +224,19 @@ class PricePredictor:
 
                 data = json.loads(data)
                 frames = []
-                for fc in data:
-                    df = pd.DataFrame(columns=["time", "wind", "temp"]) # type: ignore
+                for i, fc in enumerate(data):
+                    df = pd.DataFrame(columns=["time", f"wind_{i}", f"temp_{i}"]) # type: ignore
                     times = fc["hourly"]["time"]
                     winds = fc["hourly"]["wind_speed_80m"]
                     temps = fc["hourly"]["temperature_2m"]
                     df["time"] = times
-                    df["wind"] = winds
-                    df["temp"] = temps
+                    df[f"wind_{i}"] = winds
+                    df[f"temp_{i}"] = temps
+                    df.set_index("time", inplace=True)
                     df.dropna(inplace=True)
                     frames.append(df)
 
-                df = pd.concat(frames).groupby("time").mean().reset_index()
+                df = pd.concat(frames, axis=1).reset_index()
                 df["time"] = pd.to_datetime(df["time"], utc=True)
                 df.set_index("time", inplace=True)
 
@@ -298,10 +315,10 @@ class PricePredictor:
 async def main():
     import sys
     pd.set_option("display.max_rows", None)
-
-    root = logging.getLogger()
-    root.setLevel(logging.DEBUG)
-    handler = logging.StreamHandler(sys.stdout)
+    logging.basicConfig(
+        format='%(message)s',
+        level=logging.INFO
+    )
 
     pred = PricePredictor(testdata=True, learnDays=60)
     await pred.train()
@@ -315,11 +332,12 @@ async def main():
     actuals = map(lambda p: str(round(p/10, 1)), actual.values())
     preds = map(lambda p: str(round(p/10, 1)), predicted.values())
 
-    #x = list(x)[0:14*24]
-    #actuals = list(actuals)[0:14*24]
-    #preds = list(preds)[0:14*24]
+    x = list(x)[0:14*24]
+    actuals = list(actuals)[0:14*24]
+    preds = list(preds)[0:14*24]
 
-    print(f"""
+    print (
+        f"""
 ---
 config:
     xyChart:
