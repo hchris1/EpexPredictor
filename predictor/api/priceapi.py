@@ -1,6 +1,7 @@
 import logging
 import sys
 import os
+import asyncio
 from typing import Dict
 
 import pytz
@@ -39,28 +40,27 @@ USE_PERSISTENT_TESTDATA = os.getenv("USE_PERSISTENT_TEST_DATA", "false").lower()
 
 
 import predictor.model.pricepredictor as pp
-from threading import Lock
 
 
 class Prices:
     predictor : pp.PricePredictor = pp.PricePredictor(testdata=USE_PERSISTENT_TESTDATA)
+    
     last_weather_update : datetime.datetime = datetime.datetime(1980, 1, 1)
     last_price_update : datetime.datetime = datetime.datetime(1980, 1, 1)
 
     cachedprices : Dict[datetime.datetime, float] = {}
     cachedeval : Dict[datetime.datetime, float] = {}
 
-    # TODO: Rework predictor to proper asyncio
-    mutex = Lock()
+    updateTask : asyncio.Task | None = None
+
 
     def __init__(self):
         pass
 
-    def prices_serialized(self, hours : int = -1, fixedPrice : float = 0.0, taxPercent : float = 0.0, startTs : datetime.datetime|None = None, evaluation : bool = False):
-        with self.mutex:
-            return self.prices(hours, fixedPrice, taxPercent, startTs, evaluation)
 
-    def prices(self, hours : int = -1, fixedPrice : float = 0.0, taxPercent : float = 0.0, startTs : datetime.datetime|None = None, evaluation : bool = False):
+    async def prices(self, hours : int = -1, fixedPrice : float = 0.0, taxPercent : float = 0.0, startTs : datetime.datetime|None = None, evaluation : bool = False):
+        await self.update_in_background()
+
         tzgerman = pytz.timezone("Europe/Berlin")
 
         if startTs is None:
@@ -74,34 +74,6 @@ class Prices:
         if hours >= 0:
             endTs = startTs + datetime.timedelta(hours=hours)
 
-
-        currts = datetime.datetime.now()
-        weather_age = currts - self.last_weather_update
-        price_age = currts - self.last_price_update
-        retrain = False
-
-
-        # Update prices every 12 hours. If it's after 13:00 local, and we don't have prices for the next day yet, update every 5 minutes
-        latest_price = self.predictor.get_last_known_price()
-        price_update_frequency = 12 * 60 * 60
-        if latest_price is None or (latest_price[0] - datetime.datetime.now(pytz.UTC)).total_seconds() <= 60 * 60 * 10:
-            price_update_frequency = 5 * 60
-
-        if price_age.total_seconds() > price_update_frequency:
-            self.predictor.refresh_prices()
-            self.last_price_update = currts
-            retrain = True
-
-        if weather_age.total_seconds() > 60 * 60 * 8: # update weather every 8 hours
-            self.predictor.refresh_forecasts()
-            self.last_weather_update = currts
-            retrain = True
-
-        if retrain:
-            self.predictor.train()
-            self.cachedprices = self.predictor.predict()
-            self.cachedeval = self.predictor.predict(estimateAll=True)
-        
         prices = self.cachedprices if evaluation is False else self.cachedeval
 
         result = []
@@ -122,13 +94,60 @@ class Prices:
 
         return { "prices": result }
 
+    async def update_in_background(self):
+        if self.updateTask is None:
+            self.updateTask = asyncio.create_task(self.update_data_if_needed())
+        
+        if len(self.cachedprices) == 0:
+            await self.updateTask # sync refresh on first call
+
+
+    async def update_data_if_needed(self):
+        try:
+            currts = datetime.datetime.now()
+
+            price_age = currts - self.last_price_update
+            weather_age = currts - self.last_weather_update
+
+            self.is_currently_updating = True
+
+            # Update prices every 12 hours. If it's after 13:00 local, and we don't have prices for the next day yet, update every 5 minutes
+            latest_price = self.predictor.get_last_known_price()
+            price_update_frequency = 12 * 60 * 60
+            if latest_price is None or (latest_price[0] - datetime.datetime.now(pytz.UTC)).total_seconds() <= 60 * 60 * 10:
+                price_update_frequency = 5 * 60
+
+            retrain = False
+            if price_age.total_seconds() > price_update_frequency:
+                await self.predictor.refresh_prices()
+                self.last_price_update = currts
+                retrain = True
+
+            if weather_age.total_seconds() > 60 * 60 * 8: # update weather every 8 hours
+                await self.predictor.refresh_forecasts()
+                self.last_weather_update = currts
+                retrain = True
+
+            if retrain:
+                await self.predictor.train()
+                newprices, neweval = await self.predictor.predict(), await self.predictor.predict(estimateAll=True)
+                self.cachedprices = newprices
+                self.cachedeval = neweval
+
+        finally:
+            self.updateTask = None
+
+
+        
+
+
 
 
 
 
 pricesHandler = Prices()
 @app.get("/prices")
-def get_prices(
+async def get_prices(
     hours : int = Query(-1, description="How many hours to predict"),
     fixedPrice : float = Query(0.0, description="Add this fixed amount to all prices (ct/kWh)"),
     taxPercent : float = Query(0.0, description="Tax % to add to the final price"),
@@ -137,7 +156,7 @@ def get_prices(
     """
     Get price prediction
     """
-    return pricesHandler.prices_serialized(hours, fixedPrice, taxPercent, startTs, evaluation)
+    return await pricesHandler.prices(hours, fixedPrice, taxPercent, startTs, evaluation)
 
 
     

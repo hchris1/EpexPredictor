@@ -5,9 +5,8 @@ from typing import Dict, List, Tuple, cast
 import urllib.request
 from open_meteo_solar_forecast import OpenMeteoSolarForecast
 import pandas as pd
-import numpy as np
 import datetime
-import dateutil.parser
+import aiohttp
 import json
 import logging
 import os
@@ -56,9 +55,9 @@ class PricePredictor:
         self.forecastDays = forecastDays
 
     
-    def train(self) -> None:
+    async def train(self) -> None:
         # To determine the importance of each parameter, we first weight them using linreg, because knn is treating difference in each parameter uniformly
-        self.fulldata = self.prepare_dataframe()
+        self.fulldata = await self.prepare_dataframe()
         if self.fulldata is None:
             return
         
@@ -86,13 +85,13 @@ class PricePredictor:
     def is_trained(self) -> bool:
         return self.predictor is not None
 
-    def predict(self, estimateAll : bool = False) -> Dict[datetime.datetime, float]:
+    async def predict(self, estimateAll : bool = False) -> Dict[datetime.datetime, float]:
         """
         if estimateAll is true, you will get an estimation for the full time range, even if the prices are known already (for performance evaluation).
         if false, you will get known data as is, and only estimations for unknown data
         """
         if self.predictor is None:
-            self.train()
+            await self.train()
         assert self.fulldata is not None
         assert self.predictor is not None
 
@@ -119,11 +118,11 @@ class PricePredictor:
         return result
 
 
-    def prepare_dataframe(self) -> pd.DataFrame | None:
+    async def prepare_dataframe(self) -> pd.DataFrame | None:
         if self.weather is None or self.solar is None:
-            self.refresh_forecasts()
+            await self.refresh_forecasts()
         if self.prices is None:
-            self.refresh_prices()
+            await self.refresh_prices()
         assert self.weather is not None
         assert self.solar is not None
         assert self.prices is not None
@@ -141,26 +140,26 @@ class PricePredictor:
         return df
 
 
-    def refresh_prices(self) -> None:
+    async def refresh_prices(self) -> None:
         log.info("Updating prices...")
         try:
-            self.prices = self.fetch_prices()
+            self.prices = await self.fetch_prices()
             last_price = self.get_last_known_price()
             log.info("Price update done. Prices available until " + last_price[0].isoformat() if last_price is not None else "UNEXPECTED NONE")
         except Exception as e:
             log.warning(f"Failed to update prices : {str(e)}")
     
-    def refresh_forecasts(self) -> None:
+    async def refresh_forecasts(self) -> None:
         log.info("Updating weather forecast...")
         try:
-            self.solar = self.fetch_solar()
-            self.weather = self.fetch_weather()
+            self.solar = await self.fetch_solar()
+            self.weather = await self.fetch_weather()
             log.info("Weather update done")
         except Exception as e:
             log.warning(f"Failed to update forecast : {str(e)}")
         
 
-    def fetch_solar(self) -> pd.DataFrame | None:
+    async def fetch_solar(self) -> pd.DataFrame | None:
         if self.testdata and os.path.exists("solar.json"):
             solar = pd.read_json("solar.json")
             solar.index = solar.index.tz_localize("UTC") # type: ignore
@@ -168,7 +167,8 @@ class PricePredictor:
             return solar
 
         result = OpenMeteoSolarForecast(azimuth=[0.0]*len(LATITUDES), declination=[0.0]*len(LATITUDES), dc_kwp=[1.0]*len(LATITUDES), latitude=LATITUDES, longitude=LONGITUDES, past_days=self.learnDays, forecast_days=self.forecastDays)
-        estimate = asyncio.run(result.estimate())
+        estimate = await result.estimate()
+
         data = pd.DataFrame(estimate.watts.items(), columns=["time", "solar"]) # type: ignore
         data.time = data.reset_index().time.map(lambda dt: dt.replace(minute=0))
         data.time = pd.DatetimeIndex(data.time).tz_convert("UTC")
@@ -181,7 +181,7 @@ class PricePredictor:
         assert isinstance(data, pd.DataFrame)
         return data
     
-    def fetch_weather(self) -> pd.DataFrame | None:
+    async def fetch_weather(self) -> pd.DataFrame | None:
         if self.testdata and os.path.exists("weather.json"):
             weather = pd.read_json("weather.json")
             weather.index = weather.index.tz_localize("UTC") # type: ignore
@@ -191,32 +191,34 @@ class PricePredictor:
         lats = ",".join(map(str, LATITUDES))
         lons = ",".join(map(str, LONGITUDES))
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lats}&longitude={lons}&past_days={self.learnDays}&forecast_days={self.forecastDays}&hourly=wind_speed_80m,temperature_2m&timezone=UTC"
-        with urllib.request.urlopen(url) as resp:
-            data = resp.read().decode("utf-8")
 
-            data = json.loads(data)
-            frames = []
-            for fc in data:
-                df = pd.DataFrame(columns=["time", "wind", "temp"]) # type: ignore
-                times = fc["hourly"]["time"]
-                winds = fc["hourly"]["wind_speed_80m"]
-                temps = fc["hourly"]["temperature_2m"]
-                df["time"] = times
-                df["wind"] = winds
-                df["temp"] = temps
-                df.dropna(inplace=True)
-                frames.append(df)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                data = await resp.text()
 
-            df = pd.concat(frames).groupby("time").mean().reset_index()
-            df["time"] = pd.to_datetime(df["time"], utc=True)
-            df.set_index("time", inplace=True)
+                data = json.loads(data)
+                frames = []
+                for fc in data:
+                    df = pd.DataFrame(columns=["time", "wind", "temp"]) # type: ignore
+                    times = fc["hourly"]["time"]
+                    winds = fc["hourly"]["wind_speed_80m"]
+                    temps = fc["hourly"]["temperature_2m"]
+                    df["time"] = times
+                    df["wind"] = winds
+                    df["temp"] = temps
+                    df.dropna(inplace=True)
+                    frames.append(df)
 
-            if self.testdata:
-                df.to_json("weather.json")
-            
-            return df
+                df = pd.concat(frames).groupby("time").mean().reset_index()
+                df["time"] = pd.to_datetime(df["time"], utc=True)
+                df.set_index("time", inplace=True)
 
-    def fetch_prices(self) -> pd.DataFrame | None:
+                if self.testdata:
+                    df.to_json("weather.json")
+                
+                return df
+
+    async def fetch_prices(self) -> pd.DataFrame | None:
         if self.testdata and os.path.exists("prices.json"):
             prices = pd.read_json("prices.json")
             prices.index = prices.index.tz_localize("UTC") # type: ignore
@@ -231,44 +233,46 @@ class PricePredictor:
 
         # Get available timestamps
         url = f"https://www.smard.de/app/chart_data/{filter}/{region}/index_{resolution}.json"
-        with urllib.request.urlopen(url) as resp:
-            data = resp.read().decode("utf-8")
-            timestamps : List[int] = json.loads(data)["timestamps"]
-            timestamps.sort()
 
-        startTs = 1000 * (int(time.time()) - self.learnDays * 24 * 60 * 60)
-      
-        startIndex = len(timestamps) - 1
-        for i, timestamp in enumerate(timestamps):
-            if timestamp > startTs:
-                startIndex = i - 1
-                break
-        timestamps = timestamps[startIndex:]
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                data = await resp.text()
+                timestamps : List[int] = json.loads(data)["timestamps"]
+                timestamps.sort()
 
-        pricesDict = {}
-
-        for timestamp in timestamps:
-            url = f"https://www.smard.de/app/chart_data/{filter}/{region}/{filterCopy}_{regionCopy}_{resolution}_{timestamp}.json"
-            with urllib.request.urlopen(url) as resp:
-                data = resp.read().decode("utf-8")
-                series : List = json.loads(data)["series"]
-                for entry in series:
-                    price = entry[1]
-                    if price is None:
-                        continue
-                    dt = datetime.datetime.fromtimestamp(entry[0] / 1000, tz=pytz.timezone("Europe/Berlin"))
-                    dt = dt.astimezone(pytz.UTC)
-                    pricesDict[dt] = price
+            startTs = 1000 * (int(time.time()) - self.learnDays * 24 * 60 * 60)
         
-        data = pd.DataFrame.from_dict(pricesDict, orient="index", columns=["price"]).reset_index() # type: ignore
-        data.rename(columns={"index": "time"}, inplace=True)
-        data["time"] = pd.to_datetime(data["time"], utc=True)
-        data.set_index("time", inplace=True)
+            startIndex = len(timestamps) - 1
+            for i, timestamp in enumerate(timestamps):
+                if timestamp > startTs:
+                    startIndex = i - 1
+                    break
+            timestamps = timestamps[startIndex:]
 
-        if self.testdata:
-            data.to_json("prices.json")
+            pricesDict = {}
 
-        return data
+            for timestamp in timestamps:
+                url = f"https://www.smard.de/app/chart_data/{filter}/{region}/{filterCopy}_{regionCopy}_{resolution}_{timestamp}.json"
+                async with session.get(url) as resp:
+                    data = await resp.text()
+                    series : List = json.loads(data)["series"]
+                    for entry in series:
+                        price = entry[1]
+                        if price is None:
+                            continue
+                        dt = datetime.datetime.fromtimestamp(entry[0] / 1000, tz=pytz.timezone("Europe/Berlin"))
+                        dt = dt.astimezone(pytz.UTC)
+                        pricesDict[dt] = price
+            
+            data = pd.DataFrame.from_dict(pricesDict, orient="index", columns=["price"]).reset_index() # type: ignore
+            data.rename(columns={"index": "time"}, inplace=True)
+            data["time"] = pd.to_datetime(data["time"], utc=True)
+            data.set_index("time", inplace=True)
+
+            if self.testdata:
+                data.to_json("prices.json")
+
+            return data
 
     def get_last_known_price(self) -> Tuple[datetime.datetime, float] | None:
         if self.prices is None:
@@ -279,7 +283,7 @@ class PricePredictor:
 
 
 
-def main():
+async def main():
     import sys
     pd.set_option("display.max_rows", None)
 
@@ -288,10 +292,10 @@ def main():
     handler = logging.StreamHandler(sys.stdout)
 
     pred = PricePredictor(testdata=True, learnDays=60)
-    pred.train()
+    await pred.train()
 
-    actual = pred.predict()
-    predicted = pred.predict(estimateAll=True)
+    actual = await pred.predict()
+    predicted = await pred.predict(estimateAll=True)
 
     #xdt : List[datetime.datetime] = list(actual.keys())
     #x = map(lambda k : k.isoformat(), xdt)
@@ -299,9 +303,9 @@ def main():
     actuals = map(lambda p: str(round(p/10, 1)), actual.values())
     preds = map(lambda p: str(round(p/10, 1)), predicted.values())
 
-    x = list(x)[0:14*24]
-    actuals = list(actuals)[0:14*24]
-    preds = list(preds)[0:14*24]
+    #x = list(x)[0:14*24]
+    #actuals = list(actuals)[0:14*24]
+    #preds = list(preds)[0:14*24]
 
     print(f"""
 ---
@@ -329,4 +333,4 @@ xychart-beta
     print(json.dumps(prices))"""
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
