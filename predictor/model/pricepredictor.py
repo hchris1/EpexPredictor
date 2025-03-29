@@ -48,12 +48,12 @@ class PricePredictor:
     fulldata : pd.DataFrame | None = None
 
     testdata : bool = False
-    learnDays : int = 60
+    learnDays : int = 90
     forecastDays : int
 
     predictor : KNeighborsRegressor | None = None
 
-    def __init__(self, testdata : bool = False, learnDays=60, forecastDays=7):
+    def __init__(self, testdata : bool = False, learnDays=90, forecastDays=7):
         self.testdata = testdata
         self.learnDays = learnDays
         self.forecastDays = forecastDays
@@ -320,7 +320,7 @@ async def main():
         level=logging.INFO
     )
 
-    pred = PricePredictor(testdata=True, learnDays=60)
+    pred = PricePredictor(testdata=True)
     await pred.train()
 
     actual = await pred.predict()
