@@ -84,9 +84,10 @@ For now, you have to either use my server, or run it yourself.
 
 ### Configuration:
 ```yaml
+# Make sure you change the parameters fixedPrice and taxPercent according to your electricity plan
 sensor:
   - platform: rest
-    resource: "https://epexpredictor.batzill.com/prices?fixedPrice=13.70084&taxPercent=19"
+    resource: "https://epexpredictor.batzill.com/prices?fixedPrice=13.15&taxPercent=19"
     method: GET
     unique_id: epex_price_prediction
     name: "EPEX Price Prediction"
@@ -100,7 +101,7 @@ sensor:
   # and plot it in the same diagram as the actual prediction sensor
 
   #- platform: rest
-  #  resource: "https://epexpredictor.batzill.com/prices?fixedPrice=13.70084&taxPercent=19&#evaluation=true"
+  #  resource: "https://epexpredictor.batzill.com/prices?fixedPrice=13.15&taxPercent=19&#evaluation=true"
   #  method: GET
   #  unique_id: epex_price_prediction_evaluation
   #  scan_interval: 3600
