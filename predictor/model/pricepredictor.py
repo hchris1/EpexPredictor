@@ -192,12 +192,14 @@ class PricePredictor:
         datacols.remove("price")
         df = df.dropna(subset=datacols).copy()
 
-
-        holis = holidays.country_holidays("DE")
-        df["holiday"] = df["time"].apply(lambda t: 1 if t.weekday() == 6 or t.date() in holis else 0)
-        df["saturday"] = df["time"].apply(lambda t: 1 if t.weekday() == 5 else 0)
+        tzlocal = pytz.timezone("Europe/Berlin")
+        holis = holidays.country_holidays(self.config.COUNTRY_CODE)
+        df["holiday"] = df["time"].apply(lambda t: 1 if t.astimezone(tzlocal).weekday() == 6 or t.astimezone(tzlocal).date() in holis else 0)
+        for i in range(6):
+            df[f"day_{i}"] = df["time"].apply(lambda t: 1 if t.astimezone(tzlocal).weekday() == i else 0)
+        #df["saturday"] = df["time"].apply(lambda t: 1 if t.weekday() == 5 else 0)
         for h in range(0, 24):
-            df[f"h_{h}"] = df["time"].apply(lambda t: 1 if t.hour == h else 0)
+            df[f"h_{h}"] = df["time"].apply(lambda t: 1 if t.astimezone(tzlocal).hour == h else 0)
         return df
 
 
@@ -224,7 +226,7 @@ class PricePredictor:
         cacheFn = f"solar_{self.config.COUNTRY_CODE}.json"
         if self.testdata and os.path.exists(cacheFn):
             log.warning("Loading solar from persistent cache!")
-            await asyncio.sleep(1) # simulate async http
+            await asyncio.sleep(0) # simulate async http
             solar = pd.read_json(cacheFn)
             solar.index = solar.index.tz_localize("UTC") # type: ignore
             solar.index.set_names("time", inplace=True)
@@ -261,7 +263,7 @@ class PricePredictor:
         cacheFn = f"weather_{self.config.COUNTRY_CODE}.json"
         if self.testdata and os.path.exists(cacheFn):
             log.warning("Loading weather from persistent cache!")
-            await asyncio.sleep(1) # simulate async http
+            await asyncio.sleep(0) # simulate async http
             weather = pd.read_json(cacheFn)
             weather.index = weather.index.tz_localize("UTC") # type: ignore
             weather.index.set_names("time", inplace=True)
@@ -303,7 +305,7 @@ class PricePredictor:
 
         if self.testdata and os.path.exists(cacheFn):
             log.warning("Loading prices from persistent cache!")
-            await asyncio.sleep(1) # simulate async http
+            await asyncio.sleep(0) # simulate async http
             prices = pd.read_json(cacheFn)
             prices.index = prices.index.tz_localize("UTC") # type: ignore
             prices.index.set_names("time", inplace=True)
@@ -383,15 +385,14 @@ async def main():
     predicted = await pred.predict(estimateAll=True)
 
     #xdt : List[datetime.datetime] = list(actual.keys())
-    #x = map(lambda k : k.isoformat(), xdt)
-    x = map(str, range(0, len(actual)))
-    actuals = map(lambda p: str(round(p/10, 1)), actual.values())
-    preds = map(lambda p: str(round(p/10, 1)), predicted.values())
+    #x = map(str, range(0, len(actual)))
+    actuals = map(lambda p: str(round(p, 1)), actual.values())
+    preds = map(lambda p: str(round(p, 1)), predicted.values())
 
     start = 1500
     end = start+14*24
 
-    x = list(x)[start:end]
+    #x = list(x)[start:end]
     actuals = list(actuals)[start:end]
     preds = list(preds)[start:end]
 
@@ -408,7 +409,6 @@ config:
 ---
 xychart-beta
     title "Performance comparison"
-    x-axis [{",".join(x)}]
     line [{",".join(actuals)}]
     line [{",".join(preds)}]
     """)
