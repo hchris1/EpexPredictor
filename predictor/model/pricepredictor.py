@@ -98,11 +98,17 @@ class PricePredictor:
         self.forecastDays = forecastDays
 
     
-    async def train(self) -> None:
+    async def train(self, subset=None, prepare=True) -> None:
         # To determine the importance of each parameter, we first weight them using linreg, because knn is treating difference in each parameter uniformly
-        self.fulldata = await self.prepare_dataframe()
+        if prepare:
+            self.fulldata = await self.prepare_dataframe()
         if self.fulldata is None:
             return
+
+        if subset is None:
+            learnset = self.fulldata.dropna()
+        else:
+            learnset = subset.dropna()
 
         learnset = self.fulldata.dropna()
         learn_params = learnset.drop(columns=["time", "price"])
@@ -130,11 +136,7 @@ class PricePredictor:
     def is_trained(self) -> bool:
         return self.predictor is not None
 
-    async def predict(self, estimateAll : bool = False) -> Dict[datetime.datetime, float]:
-        """
-        if estimateAll is true, you will get an estimation for the full time range, even if the prices are known already (for performance evaluation).
-        if false, you will get known data as is, and only estimations for unknown data
-        """
+    async def predict_raw(self, estimateAll : bool = False) -> pd.DataFrame:
         if self.predictor is None:
             await self.train()
         assert self.fulldata is not None
@@ -142,6 +144,17 @@ class PricePredictor:
 
         predictionDf = self.fulldata.copy()
         predictionDf["price"] = self.predictor.predict(predictionDf.drop(columns=["time", "price"]))
+
+        return predictionDf
+
+    async def predict(self, estimateAll : bool = False) -> Dict[datetime.datetime, float]:
+        """
+        if estimateAll is true, you will get an estimation for the full time range, even if the prices are known already (for performance evaluation).
+        if false, you will get known data as is, and only estimations for unknown data
+        """
+        assert self.fulldata is not None
+
+        predictionDf = await self.predict_raw(estimateAll)
 
         predDict = self._to_price_dict(predictionDf)
 
@@ -338,6 +351,7 @@ class PricePredictor:
             data = pd.DataFrame.from_dict(pricesDict, orient="index", columns=["price"]).reset_index() # type: ignore
             data.rename(columns={"index": "time"}, inplace=True)
             data["time"] = pd.to_datetime(data["time"], utc=True)
+            data["price"] = data["price"] / 10
             data.set_index("time", inplace=True)
 
             if self.testdata:

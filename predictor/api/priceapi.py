@@ -86,7 +86,7 @@ class CountryPrices:
                 continue
             if dt > endTs:
                 continue
-            price = prediction[dt] / 10.0 # to ct/kWh
+            price = prediction[dt]
             total = (price + fixedPrice) * (1 + taxPercent / 100.0)
             dt = dt.astimezone(tzgerman)
 
