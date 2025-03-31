@@ -42,7 +42,12 @@ E.g. low wind&solar leads to gas power plants being turned on, and due to merit 
 - In the next step, we use a KNN (k=3) approach to find hours in the past with similar properties and use that to determine the final price.
 
 ## Model performance
-No scientific evaluation. I just looked at the result and they mostly seem to be within 1-10%.
+For performance testing, we used historical weather data with a 90%/10% split for a training/testing data set. See `predictor/model/performance_testing.py`.
+
+Results:\
+DE: Mean squared error ~4.88 ct/kWh, mean absolute error ~1.38 ct/kWh\
+AT: Mean squared error ~6.86 ct/kWh, mean absolute error ~1.78 ct/kWh
+
 Some observations:
 - At night, predictions are usually within 1-2ct/kWh
 - Morning/Evening peaks are usually within 3-4ct/kWh
