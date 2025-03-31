@@ -12,8 +12,8 @@ logging.basicConfig(
 
 
 async def main():
-    #pp = pred.PricePredictor(testdata=True, country=pred.Country.DE)
-    pp = pred.PricePredictor(testdata=True, country=pred.Country.AT)
+    pp = pred.PricePredictor(testdata=True, country=pred.Country.DE)
+    #pp = pred.PricePredictor(testdata=True, country=pred.Country.AT)
     fulldata = await pp.prepare_dataframe()
     #print(fulldata)
     assert fulldata is not None

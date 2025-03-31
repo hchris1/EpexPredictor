@@ -3,10 +3,7 @@
 import math
 from typing import Dict, List, Tuple, cast
 from enum import Enum
-import urllib.request
-from open_meteo_solar_forecast import OpenMeteoSolarForecast
 import pandas as pd
-import numpy as np
 import datetime
 import aiohttp
 import json
@@ -80,7 +77,6 @@ COUNTRY_CONFIG = {
 class PricePredictor:
     config : CountryConfig
     weather : pd.DataFrame | None = None
-    solar : pd.DataFrame | None = None
     prices: pd.DataFrame | None = None
 
     fulldata : pd.DataFrame | None = None
@@ -177,15 +173,14 @@ class PricePredictor:
 
 
     async def prepare_dataframe(self) -> pd.DataFrame | None:
-        if self.weather is None or self.solar is None:
+        if self.weather is None:
             await self.refresh_forecasts()
         if self.prices is None:
             await self.refresh_prices()
         assert self.weather is not None
-        assert self.solar is not None
         assert self.prices is not None
         
-        df = pd.concat([self.solar, self.weather], axis=1).dropna()
+        df = self.weather.copy().dropna()
         df = pd.concat([df, self.prices], axis=1).reset_index()
         # allow nan only in price column. All others should be filled with valid data
         datacols = list(df.columns.values)
@@ -215,49 +210,11 @@ class PricePredictor:
     async def refresh_forecasts(self) -> None:
         log.info("Updating weather forecast...")
         try:
-            self.solar = await self.fetch_solar()
             self.weather = await self.fetch_weather()
             log.info("Weather update done")
         except Exception as e:
             log.warning(f"Failed to update forecast : {str(e)}")
         
-
-    async def fetch_solar(self) -> pd.DataFrame | None:
-        cacheFn = f"solar_{self.config.COUNTRY_CODE}.json"
-        if self.testdata and os.path.exists(cacheFn):
-            log.warning("Loading solar from persistent cache!")
-            await asyncio.sleep(0) # simulate async http
-            solar = pd.read_json(cacheFn)
-            solar.index = solar.index.tz_localize("UTC") # type: ignore
-            solar.index.set_names("time", inplace=True)
-            return solar
-
-        # TODO: in theory, OpenMeteoSolarForecast can handle it if we give it multiple locations, but strange things seem to happen then..
-        # Since it does its http requests seperately anyway, we can just loop ourself...
-        frames = []
-        for i in range(len(self.config.LATITUDES)):
-            lat = self.config.LATITUDES[i]
-            lon = self.config.LONGITUDES[i]
-
-            async with OpenMeteoSolarForecast(azimuth=0, declination=0, dc_kwp=1, latitude=lat, longitude=lon, past_days=self.learnDays, forecast_days=self.forecastDays) as forecast:
-                estimate = await forecast.estimate()
-
-                data = pd.DataFrame(estimate.watts.items(), columns=["time", f"solar_{i}"]) # type: ignore
-                data.time = data.time.map(lambda dt: dt.replace(minute=0))
-                data.time = pd.DatetimeIndex(data.time).tz_convert("UTC")
-                data = data.groupby("time").agg("mean")
-                frames.append(data)
-        
-
-        df = pd.concat(frames, axis=1).reset_index()
-        df["time"] = pd.to_datetime(df["time"], utc=True)
-        df.set_index("time", inplace=True)
-       
-        if self.testdata:
-            df.to_json(cacheFn)
-
-        assert isinstance(df, pd.DataFrame)
-        return df
     
     async def fetch_weather(self) -> pd.DataFrame | None:
         cacheFn = f"weather_{self.config.COUNTRY_CODE}.json"
@@ -271,7 +228,7 @@ class PricePredictor:
 
         lats = ",".join(map(str, self.config.LATITUDES))
         lons = ",".join(map(str, self.config.LONGITUDES))
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lats}&longitude={lons}&past_days={self.learnDays}&forecast_days={self.forecastDays}&hourly=wind_speed_80m,temperature_2m&timezone=UTC"
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lats}&longitude={lons}&azimuth=0&tilt=0&past_days={self.learnDays}&forecast_days={self.forecastDays}&hourly=wind_speed_80m,temperature_2m,global_tilted_irradiance&timezone=UTC"
 
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
@@ -284,7 +241,9 @@ class PricePredictor:
                     times = fc["hourly"]["time"]
                     winds = fc["hourly"]["wind_speed_80m"]
                     temps = fc["hourly"]["temperature_2m"]
+                    irradiance = fc["hourly"]["global_tilted_irradiance"]
                     df["time"] = times
+                    df[f"irradiance_{i}"] = irradiance
                     df[f"wind_{i}"] = winds
                     df[f"temp_{i}"] = temps
                     df.set_index("time", inplace=True)
