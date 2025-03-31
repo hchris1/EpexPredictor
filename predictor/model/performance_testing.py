@@ -19,7 +19,7 @@ async def main():
     assert fulldata is not None
     fulldata.dropna(inplace=True)
 
-    n = 100
+    n = 500
     sqerror = 0
     abserror = 0
     for i in range(n):

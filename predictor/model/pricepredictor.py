@@ -106,7 +106,6 @@ class PricePredictor:
         else:
             learnset = subset.dropna()
 
-        learnset = self.fulldata.dropna()
         learn_params = learnset.drop(columns=["time", "price"])
         learn_output = learnset["price"]
         linreg = LinearRegression().fit(learn_params, learn_output)

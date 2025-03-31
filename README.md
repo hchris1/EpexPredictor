@@ -45,8 +45,8 @@ E.g. low wind&solar leads to gas power plants being turned on, and due to merit 
 For performance testing, we used historical weather data with a 90%/10% split for a training/testing data set. See `predictor/model/performance_testing.py`.
 
 Results:\
-DE: Mean squared error ~4.53 ct/kWh, mean absolute error ~1.35 ct/kWh\
-AT: Mean squared error ~6.86 ct/kWh, mean absolute error ~1.78 ct/kWh
+DE: Mean squared error ~9.98 ct/kWh, mean absolute error ~1.96 ct/kWh\
+AT: Mean squared error ~14.56 ct/kWh, mean absolute error ~2.63 ct/kWh
 
 Some observations:
 - At night, predictions are usually within 1-2ct/kWh
