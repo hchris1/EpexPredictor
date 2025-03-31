@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import asyncio
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 import pricepredictor as pred
 import logging
 
@@ -13,13 +13,14 @@ logging.basicConfig(
 
 async def main():
     pp = pred.PricePredictor(testdata=True, country=pred.Country.DE)
-    # pp = pred.PricePredictor(testdata=True, country=pred.Country.AT)
+    #pp = pred.PricePredictor(testdata=True, country=pred.Country.AT)
     fulldata = await pp.prepare_dataframe()
     assert fulldata is not None
     fulldata.dropna(inplace=True)
 
     n = 100
-    errorsum = 0
+    sqerror = 0
+    abserror = 0
     for i in range(n):
         pp.fulldata = fulldata.copy()
         train = fulldata.sample(frac=0.9) # train only on a random subset of data
@@ -32,9 +33,10 @@ async def main():
         test.set_index("time", inplace=True)
         prediction.set_index("time", inplace=True)
 
-        errorsum += mean_squared_error(test[['price']], prediction[['price']])
+        sqerror += mean_squared_error(test[['price']], prediction[['price']])
+        abserror += mean_absolute_error(test[['price']], prediction[['price']])
 
-    print(f"error={errorsum/n}")
+    print(f"mean squared error={sqerror/n}, mean absolute error = {abserror/n}")
 
 
 
