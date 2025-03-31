@@ -2,4 +2,5 @@ holidays
 scikit-learn
 pandas
 numpy
+aiohttp
 fastapi[standard]
