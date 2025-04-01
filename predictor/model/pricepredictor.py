@@ -82,12 +82,12 @@ class PricePredictor:
     fulldata : pd.DataFrame | None = None
 
     testdata : bool = False
-    learnDays : int = 90
+    learnDays : int = 30
     forecastDays : int
 
     predictor : KNeighborsRegressor | None = None
 
-    def __init__(self, country: Country = Country.DE, testdata : bool = False, learnDays=90, forecastDays=7):
+    def __init__(self, country: Country = Country.DE, testdata : bool = False, learnDays=30, forecastDays=7):
         self.config = COUNTRY_CONFIG[country]
         self.testdata = testdata
         self.learnDays = learnDays
@@ -347,7 +347,7 @@ async def main():
     actuals = map(lambda p: str(round(p, 1)), actual.values())
     preds = map(lambda p: str(round(p, 1)), predicted.values())
 
-    start = 1500
+    start = 100
     end = start+14*24
 
     #x = list(x)[start:end]
