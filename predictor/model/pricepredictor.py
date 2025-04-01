@@ -106,26 +106,32 @@ class PricePredictor:
         else:
             learnset = subset.dropna()
 
-        learn_params = learnset.drop(columns=["time", "price"])
-        learn_output = learnset["price"]
-        linreg = LinearRegression().fit(learn_params, learn_output)
+        params = learnset.drop(columns=["price"])
+        output = learnset["price"]
+        linreg = LinearRegression().fit(params, output)
         param_scaling_factors = linreg.coef_
-
-        weights = {col: param_scaling_factors[i] for i, col in enumerate(learn_params.columns.values)}
-        log.info(f"Traning result, importance of parameters: {json.dumps(weights)}")
-
-        # Do the scaling on all params, then prepare knn
-        learn_params *= param_scaling_factors
-
-        self.predictor = KNeighborsRegressor(n_neighbors=3).fit(learn_params, learn_output)
-
-        # Update self.fulldata with scaled parameters
-        orig_time_price = self.fulldata[["time", "price"]]
-        self.fulldata = self.fulldata.drop(columns=["time", "price"])
-        self.fulldata *= param_scaling_factors
-        self.fulldata["time"] = orig_time_price["time"]
-        self.fulldata["price"] = orig_time_price["price"]
         
+        # Apply same scaling to learning set and full data
+        params *= param_scaling_factors
+        orig_price = self.fulldata["price"]
+        self.fulldata.drop(columns=["price"], inplace=True)
+        self.fulldata *= param_scaling_factors
+        self.fulldata["price"] = orig_price
+
+        # Since all numeric values (wind/solar/temperature) now have the same scaling/relevance to the output variable, we can now just sum them up
+        # Intention: we don't care if we have a lot of production from wind OR from solar
+        windcols = [f"wind_{i}" for i in range(len(self.config.LATITUDES))]
+        irradiancecols = [f"irradiance_{i}" for i in range(len(self.config.LATITUDES))]
+        tempcols = [f"temp_{i}" for i in range(len(self.config.LATITUDES))]
+        weathercols = windcols + irradiancecols + tempcols
+
+        params["weathersum"] = params[weathercols].sum(axis=1)
+        params.drop(columns=weathercols, inplace=True)
+        self.fulldata["weathersum"] = self.fulldata[weathercols].sum(axis=1)
+        self.fulldata.drop(columns=weathercols, inplace=True)
+
+        self.predictor = KNeighborsRegressor(n_neighbors=3).fit(params, output)
+
         
 
     def is_trained(self) -> bool:
@@ -138,7 +144,7 @@ class PricePredictor:
         assert self.predictor is not None
 
         predictionDf = self.fulldata.copy()
-        predictionDf["price"] = self.predictor.predict(predictionDf.drop(columns=["time", "price"]))
+        predictionDf["price"] = self.predictor.predict(predictionDf.drop(columns=["price"]))
 
         return predictionDf
 
@@ -162,8 +168,8 @@ class PricePredictor:
 
     def _to_price_dict(self, df : pd.DataFrame) -> Dict[datetime.datetime, float]:
         result = {}
-        for _, row in df.iterrows():
-            ts = cast(pd.Timestamp, row["time"]).to_pydatetime()
+        for time, row in df.iterrows():
+            ts = cast(pd.Timestamp, time).to_pydatetime()
             price = row["price"]
             if math.isnan(price):
                 continue
@@ -194,6 +200,8 @@ class PricePredictor:
         #df["saturday"] = df["time"].apply(lambda t: 1 if t.weekday() == 5 else 0)
         for h in range(0, 24):
             df[f"h_{h}"] = df["time"].apply(lambda t: 1 if t.astimezone(tzlocal).hour == h else 0)
+        
+        df.set_index("time", inplace=True)
         return df
 
 
@@ -336,7 +344,7 @@ async def main():
         level=logging.INFO
     )
 
-    pred = PricePredictor(testdata=True)
+    pred = PricePredictor(testdata=False)
     await pred.train()
 
     actual = await pred.predict()

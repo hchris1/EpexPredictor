@@ -12,8 +12,8 @@ logging.basicConfig(
 
 
 async def main():
-    pp = pred.PricePredictor(testdata=True, country=pred.Country.DE)
-    #pp = pred.PricePredictor(testdata=True, country=pred.Country.AT)
+    pp = pred.PricePredictor(testdata=False, country=pred.Country.DE)
+    #pp = pred.PricePredictor(testdata=False, country=pred.Country.AT)
     fulldata = await pp.prepare_dataframe()
     #print(fulldata)
     assert fulldata is not None
@@ -25,14 +25,12 @@ async def main():
     for i in range(n):
         pp.fulldata = fulldata.copy()
         train = fulldata.sample(frac=0.9) # train only on a random subset of data
+        #train = fulldata[0:int(0.9*len(fulldata))]
         await pp.train(subset=train, prepare=False)
 
         test = fulldata.drop(train.index) # but use the remaining data for actual prediction
         prediction = await pp.predict_raw(estimateAll=True)
         prediction = prediction.drop(train.index)
-
-        test.set_index("time", inplace=True)
-        prediction.set_index("time", inplace=True)
 
         sqerror += mean_squared_error(test[['price']], prediction[['price']])
         abserror += mean_absolute_error(test[['price']], prediction[['price']])
