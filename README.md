@@ -47,7 +47,7 @@ For performance testing, we used historical weather data with a 90%/10% split fo
 
 Results:\
 DE: Mean squared error ~4.02 ct/kWh, mean absolute error ~1.42 ct/kWh\
-AT: Mean squared error ~6.56 ct/kWh, mean absolute error ~1.74 ct/kWh
+AT: Mean squared error ~5.20 ct/kWh, mean absolute error ~1.66 ct/kWh
 
 Some observations:
 - At night, predictions are usually within 1-2ct/kWh
