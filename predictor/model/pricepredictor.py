@@ -14,6 +14,7 @@ import holidays
 import time
 import pytz
 
+from entsoe import EntsoePandasClient
 from sklearn.linear_model import LinearRegression
 from sklearn.neighbors import KNeighborsRegressor
 
@@ -22,6 +23,7 @@ log = logging.getLogger(__name__)
 class Country(str, Enum):
     DE = 'DE'
     AT = 'AT'
+    SE = 'SE'
 
 class CountryConfig:
     COUNTRY_CODE : str
@@ -73,6 +75,24 @@ COUNTRY_CONFIG = {
                     10.82,
                     13.54,
                     15.80
+                ],
+               ),
+        Country.SE : CountryConfig(
+                COUNTRY_CODE = 'SE',
+                FILTER = 'SE',
+                LATITUDES = [
+                    67.51,  # Kiruna
+                    63.10,  # Östersund
+                    59.19,  # Stockholm
+                    57.42,  # Gothenburg
+                    55.36   # Malmö
+                ],
+                LONGITUDES = [
+                    20.13,  # Kiruna
+                    14.38,  # Östersund
+                    18.03,  # Stockholm
+                    11.58,  # Gothenburg
+                    13.00   # Malmö
                 ],
                ),
         }
@@ -281,6 +301,10 @@ class PricePredictor:
             prices.index.set_names("time", inplace=True)
             return prices
 
+        # Use ENTSO-E for Sweden because SMARD only supports DE and AT
+        if self.config.COUNTRY_CODE == 'SE':
+            return await self.fetch_entsoe_prices()
+
         filter = self.config.FILTER # marktpreis
         region = self.config.COUNTRY_CODE 
         filterCopy = filter
@@ -330,6 +354,46 @@ class PricePredictor:
                 data.to_json(cacheFn)
 
             return data
+
+    async def fetch_entsoe_prices(self) -> pd.DataFrame | None:
+        api_key = os.getenv("ENTSOE_API_KEY")
+        if not api_key:
+            log.error("ENTSOE_API_KEY environment variable not set. Get your API key from https://transparency.entsoe.eu/")
+            return None
+        
+        try:
+            client = EntsoePandasClient(api_key=api_key)
+            
+            # Calculate the time range
+            end = pd.Timestamp.now(tz='Europe/Stockholm')
+            start = end - pd.Timedelta(days=self.learnDays)
+
+            eic_code = '10Y1001A1001A46L'            
+            prices = await asyncio.get_event_loop().run_in_executor(
+                None,
+                client.query_day_ahead_prices,
+                eic_code,
+                start,
+                end
+            )
+            
+            # Convert from EUR/MWh to ct/kWh
+            prices = prices / 10
+            
+            data = pd.DataFrame({'price': prices})
+            data.index = pd.to_datetime(data.index, utc=True)
+            data.index.name = 'time'
+            
+            # Cache if in test mode
+            cacheFn = f"prices_{self.config.COUNTRY_CODE}.json"
+            if self.testdata:
+                data.to_json(cacheFn)
+            
+            return data
+            
+        except Exception as e:
+            log.error(f"Failed to fetch ENTSO-E prices for Sweden: {e}")
+            return None
 
     def get_last_known_price(self) -> Tuple[datetime.datetime, float] | None:
         if self.prices is None:

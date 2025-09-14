@@ -172,7 +172,7 @@ class PricesModel(BaseModel):
     knownUntil: datetime.datetime
 
 class Prices:
-    countryPrices : Dict[Country, CountryPrices] = {Country.DE: CountryPrices(Country.DE), Country.AT: CountryPrices(Country.AT)}
+    countryPrices : Dict[Country, CountryPrices] = {Country.DE: CountryPrices(Country.DE), Country.AT: CountryPrices(Country.AT), Country.SE: CountryPrices(Country.SE)}
 
     def __init__(self):
         pass
