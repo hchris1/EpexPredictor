@@ -15,7 +15,7 @@ from predictor.model.pricepredictor import Country
 
 app = FastAPI(title="EPEX day-ahead prediction API", description="""
 API can be used free of charge on a fair use premise.
-There are no guarantees on availability or correctnes of the data.
+There are no guarantees on availability or correctness of the data.
 This is an open source project, feel free to host it yourself. [Source code and docs](https://github.com/b3nn0/EpexPredictor)
 
 ### Attribution
